@@ -1,0 +1,1953 @@
+Parameters:
+  Environment:
+    Type: String
+
+  Audience:
+    Type: String
+
+  Issuer:
+    Type: String
+  IdcInstanceArn:
+    Type: String
+
+  PluginDisplayName:
+    Type: String
+
+  ClientId:
+    Type: String
+
+  ClientSecret:
+    Type: String
+
+  AuthorizationUrl:
+    Type: String
+
+  TokenUrl:
+    Type: String
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: MyVPC
+
+  VPCFlowLog:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      ResourceType: VPC
+      ResourceId: !Ref VPC
+      TrafficType: ALL
+      DeliverLogsPermissionArn: !GetAtt VPCFlowLogRole.Arn
+      LogDestinationType: cloud-watch-logs
+      LogGroupName: !Ref VPCFlowLogGroup
+
+  VPCFlowLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/vpc/flowlogs/${AWS::StackName}'
+      RetentionInDays: 14
+      KmsKeyId: !GetAtt MyKMSKey.Arn
+  VPCFlowLogRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: vpc-flow-logs.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: allow-flow-logs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                Resource: !GetAtt VPCFlowLogGroup.Arn
+
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.0.3.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: Private Subnet 1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: 10.0.4.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: Private Subnet 2 
+
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: Private Route Table
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  # Amazon Connect Instance and related resources
+  AmazonConnectInstance:
+    Type: AWS::Connect::Instance
+    Properties:
+      Attributes:
+        ContactflowLogs: true
+        InboundCalls: true
+        OutboundCalls: true
+      IdentityManagementType: CONNECT_MANAGED
+      InstanceAlias: !Sub
+        - ${prefix}-${randomString}-${environment}
+        - prefix: connect-demo
+          randomString: !Select [4, !Split ['-', !Select [2, !Split ['/', !Ref AWS::StackId]]]]
+          environment: !Ref Environment
+
+  AmazonConnectDomain:
+    Type: "AWS::CustomerProfiles::Domain" 
+    Properties:
+        DomainName: !Sub 'amazon-connect-${Environment}-CustomerProfile'
+        DefaultExpirationDays: 6
+
+  CustomerProfilesConnectIntegration:
+    Type: AWS::CustomerProfiles::Integration
+    Properties:
+      DomainName: !Ref AmazonConnectDomain
+      ObjectTypeName: CTR
+      Uri: !Sub 'arn:aws:connect:${AWS::Region}:${AWS::AccountId}:instance/${AmazonConnectInstance.Id}'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  HoursOfOperation:
+    Type: AWS::Connect::HoursOfOperation
+    Properties:
+      Name: Office Hours
+      Description: Office Hours
+      InstanceArn: !GetAtt AmazonConnectInstance.Arn
+      TimeZone: Asia/Singapore
+      Config:
+        - Day: MONDAY
+          EndTime:
+            Hours: 19
+            Minutes: 0
+          StartTime:
+            Hours: 9
+            Minutes: 30
+        - Day: TUESDAY
+          EndTime:
+            Hours: 19
+            Minutes: 0
+          StartTime:
+            Hours: 9
+            Minutes: 30
+        - Day: WEDNESDAY
+          EndTime:
+            Hours: 19
+            Minutes: 0
+          StartTime:
+            Hours: 9
+            Minutes: 30
+        - Day: THURSDAY
+          EndTime:
+            Hours: 19
+            Minutes: 0
+          StartTime:
+            Hours: 9
+            Minutes: 30
+        - Day: FRIDAY
+          EndTime:
+            Hours: 19
+            Minutes: 0
+          StartTime:
+            Hours: 9
+            Minutes: 30
+
+  CustomSecurityProfileAdmin:
+    Type: AWS::Connect::SecurityProfile
+    Properties:
+      InstanceArn: !GetAtt AmazonConnectInstance.Arn
+      SecurityProfileName: CustomAdminProfile
+      Description: Custom admin profile with full permissions
+      Permissions:
+        - RoutingPolicies.Create
+        - RoutingPolicies.Edit
+        - RoutingPolicies.View
+        - TransferDestinations.Create
+        - TransferDestinations.Delete
+        - TransferDestinations.Edit
+        - TransferDestinations.View
+        - HoursOfOperation.Create
+        - HoursOfOperation.Delete
+        - HoursOfOperation.Edit
+        - HoursOfOperation.View
+        - Queues.Create
+        - Queues.Edit
+        - Queues.EnableAndDisable
+        - Queues.View
+        - TaskTemplates.Create
+        - TaskTemplates.Delete
+        - TaskTemplates.Edit
+        - TaskTemplates.View
+        - PredefinedAttributes.View
+        - PredefinedAttributes.Edit
+        - PredefinedAttributes.Create
+        - PredefinedAttributes.Delete
+        - Prompts.Create
+        - Prompts.Delete
+        - Prompts.Edit
+        - Prompts.View
+        - ContactFlows.Create
+        - ContactFlows.Delete
+        - ContactFlows.Edit
+        - ContactFlows.Publish
+        - ContactFlows.View
+        - ContactFlowModules.Create
+        - ContactFlowModules.Delete
+        - ContactFlowModules.Edit
+        - ContactFlowModules.Publish
+        - ContactFlowModules.View
+        - PhoneNumbers.Claim
+        - PhoneNumbers.Edit
+        - PhoneNumbers.Release
+        - PhoneNumbers.View
+        - ChatTestMode
+        - Views.View
+        - Views.Edit
+        - Views.Create
+        - Views.Remove
+        - AnalyticsConnectors.Edit
+        - AnalyticsConnectors.View
+        - Users.Create
+        - Users.Delete
+        - Users.Edit
+        - Users.EditPermission
+        - Users.View
+        - AgentGrouping.Create
+        - AgentGrouping.Edit
+        - AgentGrouping.EnableAndDisable
+        - AgentGrouping.View
+        - SecurityProfiles.Create
+        - SecurityProfiles.Delete
+        - SecurityProfiles.Edit
+        - SecurityProfiles.View
+        - AgentStates.Create
+        - AgentStates.Edit
+        - AgentStates.EnableAndDisable
+        - AgentStates.View
+        - BasicAgentAccess
+        - RealtimeContactLens.View
+        - OutboundCallAccess
+        - VoiceId.Access
+        - RestrictTaskCreation.Access
+        - AudioDeviceSettings.Access
+        - VideoContact.Access
+        - OutboundEmail.Create
+        - SelfAssignContacts.Access
+        - AccessMetrics
+        - AccessMetrics.RealTimeMetrics.Access
+        - AccessMetrics.HistoricalMetrics.Access
+        - AccessMetrics.AgentActivityAudit.Access
+        - AccessMetrics.Dashboards.Access
+        - ContactSearch.View
+        - MyContacts.View
+        - ContactSearchWithCharacteristics.Access
+        - ContactSearchWithCharacteristics.View
+        - ContactSearchWithKeywords.Access
+        - ContactSearchWithKeywords.View
+        - ConfigureContactAttributes.View
+        - RestrictContactAccessByHierarchy.View
+        - ContactAttributes.View
+        - GraphTrends.View
+        - ContactLensPostContactSummary.View
+        - ContactLensCustomVocabulary.Edit
+        - ContactLensCustomVocabulary.View
+        - ThemeDetection.Create
+        - ThemeDetection.View
+        - ThemeDetection.Delete
+        - Rules.Create
+        - Rules.Delete
+        - Rules.Edit
+        - RulesGenerativeAI.Create
+        - RulesGenerativeAI.View
+        - RulesGenerativeAI.Edit
+        - RulesGenerativeAI.Delete
+        - Rules.View
+        - RedactedData.View
+        - ListenCallRecordings
+        - DownloadCallRecordings
+        - DeleteCallRecordings
+        - AgentTimeCard.View
+        - ManagerListenIn
+        - ManagerBargeIn
+        - MetricsReports.View
+        - MetricsReports.Create
+        - MetricsReports.Share
+        - MetricsReports.Edit
+        - MetricsReports.Delete
+        - MetricsReports.Publish
+        - MetricsReports.Schedule
+        - ReportSchedules.Create
+        - ReportSchedules.Delete
+        - ReportSchedules.Edit
+        - ReportSchedules.View
+        - ReportsAdmin.View
+        - ReportsAdmin.Delete
+        - Evaluation.Create
+        - Evaluation.View
+        - Evaluation.Edit
+        - Evaluation.Delete
+        - EvaluationForms.Create
+        - EvaluationForms.View
+        - EvaluationForms.Edit
+        - EvaluationForms.Delete
+        - EvaluationAssistant.Access
+        - EvaluationCalibrationSessions.Create
+        - EvaluationCalibrationSessions.Delete
+        - EvaluationCalibrationSessions.Edit
+        - EvaluationCalibrationSessions.View
+        - VoiceIdAttributesAndSearch.View
+        - Forecasting.View
+        - Forecasting.Edit
+        - Forecasting.Publish
+        - Capacity.View
+        - Capacity.Edit
+        - Capacity.Publish
+        - ForecastScheduleInterval.Edit
+        - ForecastScheduleInterval.View
+        - ScreenRecording.Access
+        - ScreenRecording.Download
+        - TransferContact.Enabled
+        - StopContact.Enabled
+        - UpdateContactSchedule.Enabled
+        - HistoricalChanges.View
+        - CustomerProfiles.Create
+        - CustomerProfiles.Edit
+        - CustomerProfiles.View
+        - CustomerProfiles.CalculatedAttributes.Create
+        - CustomerProfiles.CalculatedAttributes.Edit
+        - CustomerProfiles.CalculatedAttributes.Delete
+        - CustomerProfiles.CalculatedAttributes.View
+        - CustomerProfiles.Segments.View
+        - CustomerProfiles.Segments.Create
+        - CustomerProfiles.Segments.Delete
+        - CustomerProfiles.Segments.Export
+        - Scheduling.View
+        - Scheduling.Edit
+        - Scheduling.Publish
+        - TimeOff.Approve
+        - TimeOff.Edit
+        - TimeOff.View
+        - TimeOffBalance.Edit
+        - TimeOffBalance.View
+        - TeamCalendar.View
+        - TeamCalendar.Edit
+        - StaffCalendar.View
+        - StaffCalendar.Edit
+        - CustomViews.Access
+        - Wisdom.View
+        - ContentManagement.Create
+        - ContentManagement.Edit
+        - ContentManagement.View
+        - ContentManagement.Delete
+        - CaseHistory.View
+        - Cases.Create
+        - Cases.View
+        - Cases.Edit
+        - CaseFields.Create
+        - CaseFields.View
+        - CaseFields.Edit
+        - CaseTemplates.Create
+        - CaseTemplates.View
+        - CaseTemplates.Edit
+        - Campaigns.Create
+        - Campaigns.Delete
+        - Campaigns.Edit
+        - Campaigns.View
+      
+  DefaultOutboundQueue:
+    Type: AWS::Connect::Queue
+    Properties:
+      InstanceArn: !GetAtt AmazonConnectInstance.Arn
+      Name: DefaultOutboundQueue
+      Description: Default outbound queue for admin routing profile
+      HoursOfOperationArn: !Ref HoursOfOperation
+  
+  CustomAdminRoutingProfile:
+    Type: AWS::Connect::RoutingProfile
+    Properties:
+      InstanceArn: !GetAtt AmazonConnectInstance.Arn
+      Name: CustomAdminRoutingProfile
+      Description: Custom routing profile for XYZ with full permissions
+      DefaultOutboundQueueArn: !GetAtt DefaultOutboundQueue.QueueArn
+      MediaConcurrencies:
+        - Channel: VOICE
+          Concurrency: 1
+        - Channel: CHAT
+          Concurrency: 5
+        - Channel: TASK
+          Concurrency: 5
+      QueueConfigs:
+        - Delay: 0
+          Priority: 1
+          QueueReference:
+            Channel: VOICE
+            QueueArn: !GetAtt DefaultOutboundQueue.QueueArn
+
+  ConnectCasesLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ConnectCasesAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cases:CreateDomain
+                  - cases:CreateTemplate
+                  - cases:GetDomain
+                  - cases:ListDomains
+                  - cases:DeleteDomain
+                Resource: !Sub 'arn:aws:cases:${AWS::Region}:${AWS::AccountId}:domain/*'
+              - Effect: Allow
+                Action:
+                  - connect:ListIntegrationAssociations
+                  - connect:DeleteIntegrationAssociation
+                  - connect:CreateIntegrationAssociation
+                Resource: !Sub 'arn:aws:connect:${AWS::Region}:${AWS::AccountId}:instance/*'
+              - Effect: Allow
+                Action:
+                  - profile:CreateProfile
+                  - profile:SearchProfiles
+                Resource: !Sub 'arn:aws:profile:${AWS::Region}:${AWS::AccountId}:domains/*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: 'arn:aws:logs:*:*:*'
+              - Effect: Allow
+                Action:
+                  - iam:PutRolePolicy
+                  - iam:CreateServiceLinkedRole
+                Resource: 'arn:aws:iam::*:role/aws-service-role/connect.amazonaws.com/*'
+  ConnectCasesLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.lambda_handler
+      Role: !GetAtt ConnectCasesLambdaRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import time
+          import cfnresponse
+
+          connect_cases = boto3.client('connectcases')
+          connect = boto3.client('connect')
+          customer_profiles = boto3.client('customer-profiles')
+
+          def create_case_domain(domain_name):
+              response = connect_cases.create_domain(name=domain_name)
+              return response['domainArn']
+
+          def create_case_template(domain_id, template_name):
+              response = connect_cases.create_template(
+                  domainId=domain_id,
+                  name=template_name,
+                  description='Sample case template to have something',
+                  status='Active'
+              )
+              return response['templateArn']
+
+          def list_instance_integrations(instance_id):
+              try:
+                  response = connect.list_integration_associations(InstanceId=instance_id)
+                  return response.get('IntegrationAssociationSummaryList', [])
+              except Exception as e:
+                  print(f"Error listing integrations: {str(e)}")
+                  return []
+
+          def delete_integration(instance_id, integration_id):
+              try:
+                  connect.delete_integration_association(
+                      InstanceId=instance_id,
+                      IntegrationAssociationId=integration_id
+                  )
+                  print(f"Deleted integration: {integration_id}")
+                  return True
+              except Exception as e:
+                  print(f"Error deleting integration: {str(e)}")
+                  return False
+
+          def clean_up_existing_cases_integrations(instance_id):
+              integrations = list_instance_integrations(instance_id)
+              for integration in integrations:
+                  if integration['IntegrationType'] == 'CASES_DOMAIN':
+                      print(f"Found existing Cases integration: {integration['IntegrationAssociationId']}")
+                      delete_integration(instance_id, integration['IntegrationAssociationId'])
+                      time.sleep(5)
+
+          def associate_domain_to_instance(domain_arn, instance_id):
+              try:
+                  clean_up_existing_cases_integrations(instance_id)
+                  time.sleep(10)
+                  response = connect.create_integration_association(
+                      InstanceId=instance_id,
+                      IntegrationType='CASES_DOMAIN',
+                      IntegrationArn=domain_arn
+                  )
+                  return response
+              except Exception as e:
+                  print(f"Error in association: {str(e)}")
+                  raise
+
+          def wait_for_domain_active(domain_id):
+              print(f"Waiting for domain {domain_id} to become active...")
+              while True:
+                  response = connect_cases.get_domain(domainId=domain_id)
+                  status = response.get('domainStatus')
+                  print(f"Domain status: {status}")
+                  if status == 'Active':
+                      return True
+                  elif status == 'Failed':
+                      raise Exception("Domain creation failed")
+                  time.sleep(10)
+
+          def create_customer_profile(profile_data):
+              try:
+                  response = customer_profiles.create_profile(**profile_data)
+                  print("Customer profile created successfully.")
+                  return response['ProfileId']
+              except Exception as e:
+                  print(f"An error occurred while creating customer profile: {str(e)}")
+                  raise
+
+          def list_domains():
+              try:
+                  response = connect_cases.list_domains()
+                  return response.get('domains', [])
+              except Exception as e:
+                  print(f"Error listing domains: {str(e)}")
+                  return []
+          def delete_domain(domain_arn):
+              try:
+                  connect_cases.delete_domain(domainId=domain_arn)
+                  return True
+              except Exception as e:
+                  print(f"Error deleting domain: {str(e)}")
+                  return False
+
+          def lambda_handler(event, context):
+              try:
+                  if event['RequestType'] in ['Create', 'Update']:
+                      case_domain_name = event['ResourceProperties']['CaseDomainName']
+                      template_name = event['ResourceProperties']['TemplateName']
+                      instance_id = event['ResourceProperties']['InstanceId']
+                      profile_domain_name = event['ResourceProperties']['ProfileDomainName']
+
+                      domain_arn = create_case_domain(case_domain_name)
+                      print(f"Created domain with ARN: {domain_arn}")
+                      
+                      domain_id = domain_arn.split('/')[-1]
+                      wait_for_domain_active(domain_id)
+
+                      template_arn = create_case_template(domain_id, template_name)
+                      print(f"Created template with ARN: {template_arn}")
+
+                      associate_response = associate_domain_to_instance(domain_arn, instance_id)
+                      print(f"Associated domain with instance. Response: {associate_response}")
+
+                      profile_data = {
+                          'DomainName': profile_domain_name,
+                          'FirstName': 'Anil',
+                          'LastName': 'Giri',
+                          'PhoneNumber': '+123456789',
+                          'EmailAddress': 'john.doe@example.com',
+                          'Address': {
+                              'Address1': '123 Main St',
+                              'City': 'Anytown',
+                              'State': 'CA',
+                              'Country': 'USA',
+                              'PostalCode': 'WD2lALA'
+                          },
+                          'Attributes': {
+                              'CustomerType': 'Premium',
+                              'PreferredContactMethod': 'Email'
+                          }
+                      }
+
+                      profile_id = create_customer_profile(profile_data)
+
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {
+                          'DomainArn': domain_arn,
+                          'TemplateArn': template_arn,
+                             'ProfileId': profile_id
+                      })
+                  elif event['RequestType'] == 'Delete':
+                      domains = list_domains()
+                      for domain in domains:
+                          if delete_domain(domain['domainArn']):
+                              print(f"Successfully deleted domain: {domain['name']}")
+                          else:
+                              print(f"Failed to delete domain: {domain['name']}")
+                          time.sleep(5)
+                      time.sleep(10)
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                  else:
+                      cfnresponse.send(event, context, cfnresponse.FAILED, {})
+              except Exception as e:
+                  print(f"Error: {str(e)}")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {})
+
+      Runtime: python3.12
+      Timeout: 300
+      ReservedConcurrentExecutions: 10
+
+  ConnectCasesCustomResource:
+    Type: Custom::ConnectCases
+    Properties:
+      ServiceToken: !GetAtt ConnectCasesLambda.Arn
+      CaseDomainName: !Sub 'amazon-connect-mycasedomain-${Environment}'
+      TemplateName: !Sub 'amazon-connect-newtemplate-${Environment}'
+      InstanceId: !GetAtt AmazonConnectInstance.Id
+      ProfileDomainName: !Ref AmazonConnectDomain
+
+  ConnectUserAdmin:
+    Type: AWS::Connect::User
+    Properties:
+      IdentityInfo:
+        FirstName: admin
+        LastName: user
+      PhoneConfig:
+        PhoneType: 'DESK_PHONE'
+        AutoAccept: true
+        DeskPhoneNumber: '+1424222423'
+        AfterContactWorkTimeLimit: 10
+      Username: admin
+      InstanceArn: !GetAtt AmazonConnectInstance.Arn
+      RoutingProfileArn: !Ref CustomAdminRoutingProfile
+      SecurityProfileArns: [!Ref CustomSecurityProfileAdmin]
+      Password: !GetAtt CustomResourceGenerateRandomStringAdmin.RandomString
+
+  LambdaFunctionGenerateRandomString:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.lambda_handler
+      Description: Generate random string
+      Role: !GetAtt GenerateRandomStringRole.Arn
+      Runtime: python3.12
+      MemorySize: 128
+      Timeout: 3
+      Environment:
+        Variables:
+          LOG_LEVEL: INFO
+      Code:
+        ZipFile: |
+          import boto3
+          import botocore
+          import random
+          import logging
+          import os
+          import cfnresponse
+          import string
+  
+          client = boto3.client('ssm')
+  
+          LOG_LEVEL = os.getenv('LOG_LEVEL')
+  
+          def lambda_handler(event, context):
+            global log_level
+            log_level = str(LOG_LEVEL).upper()
+            if log_level not in {'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'}:
+              log_level = 'ERROR'
+            logging.getLogger().setLevel(log_level)
+  
+            logging.info(f'Event: {event}')
+  
+            request_type = event['RequestType']
+  
+            if request_type == 'Delete':
+              security_profile_name = event['ResourceProperties']['SecurityProfileName']
+              try:
+                response = client.delete_parameter(
+                  Name=f'amazon-connect-temp-{security_profile_name}-password'
+                )
+  
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                return
+              except botocore.exceptions.ClientError as err:
+                if err.response['Error']['Code'] == 'ParameterNotFound':
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                  return
+                else:
+                  logging.error(err)
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {'message': f'ERROR: {err}'})
+                  return
+              except Exception as e:
+                logging.error(e)
+                cfnresponse.send(event, context, cfnresponse.FAILED, {'message': f'ERROR: {e}'})
+                return
+  
+            if request_type in {'Create', 'Update'}:
+              try:
+                string_length = event['ResourceProperties']['StringLength']
+                security_profile_name = event['ResourceProperties']['SecurityProfileName']
+  
+                valid_characters = string.ascii_letters + string.digits + "!@#$%^&*_=-"
+                random_string = random.SystemRandom().choice(string.ascii_lowercase)
+                random_string += random.SystemRandom().choice(string.ascii_uppercase)
+                random_string += random.SystemRandom().choice(string.digits)
+                random_string += random.SystemRandom().choice('!@#$%^&*_=-')
+  
+                for i in range(int(string_length)-4):
+                  random_string += random.SystemRandom().choice(valid_characters)
+  
+                response = client.put_parameter(
+                  Name=f'amazon-connect-temp-{security_profile_name}-password',
+                  Description=f'SSM Parameter to store the temporary Amazon Connect {security_profile_name} Password',
+                  Value=random_string,
+                  Type='SecureString',
+                  Overwrite=True,
+                  Tier='Standard'
+                )
+  
+                response_data = {
+                  'RandomString': random_string
+                }
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data)
+              except Exception as e:
+                logging.error(e)
+                cfnresponse.send(event, context, cfnresponse.FAILED, {'message': f'ERROR: {e}'})
+                return
+
+      ReservedConcurrentExecutions: 10
+
+  GenerateRandomStringRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole 
+      Policies:
+        - PolicyName: putAndDeleteSSMParameters
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - ssm:DeleteParameter
+              - ssm:PutParameter
+              Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter*
+
+  CustomResourceGenerateRandomStringAdmin:
+    Type: Custom::S3CustomResource
+    Properties:
+      ServiceToken: !GetAtt LambdaFunctionGenerateRandomString.Arn
+      StringLength: 15
+      SecurityProfileName: Admin
+
+  InstanceStorageConfig:
+    Type: AWS::Connect::InstanceStorageConfig
+    Properties:
+      InstanceArn: !GetAtt AmazonConnectInstance.Arn
+      ResourceType: CHAT_TRANSCRIPTS
+      S3Config:
+        BucketName: !Ref S3BucketForInstanceStorageConfig
+        BucketPrefix: ChatTranscripts
+        EncryptionConfig:
+          EncryptionType: KMS
+          KeyId: !GetAtt KmsKeyForInstanceStorageConfig.Arn
+      StorageType: S3
+
+  S3BucketForInstanceStorageConfig:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: aws:kms
+            KMSMasterKeyID: !GetAtt KmsKeyForInstanceStorageConfig.Arn
+          BucketKeyEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LoggingConfiguration:
+        DestinationBucketName: !Ref S3BucketForAccessLogging
+        LogFilePrefix: access-logs
+
+  S3BucketForInstanceStorageConfigBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3BucketForInstanceStorageConfig
+      PolicyDocument:
+        Statement:
+          - Sid: AllowSSLRequestsOnly
+            Action:
+              - s3:*
+            Effect: Deny
+            Resource:
+              - !GetAtt S3BucketForInstanceStorageConfig.Arn
+              - !Sub ${S3BucketForInstanceStorageConfig.Arn}/*
+            Principal: '*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  KmsKeyForInstanceStorageConfig:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: For S3 Bucket that contains logs from Amazon Connect's Instance Storage Config
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: key-default-1
+        Statement:
+          - Sid: Root Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action: kms:*
+            Resource: '*'
+
+  S3BucketForAccessLogging:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LoggingConfiguration:
+        DestinationBucketName: !Ref S3BucketForServerAccessLogging
+        LogFilePrefix: access-logs-for-logging-bucket
+
+  S3BucketForAccessLoggingPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3BucketForAccessLogging
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EnforceHttpsOnly
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource: 
+              - !Sub '${S3BucketForAccessLogging.Arn}/*'
+              - !GetAtt S3BucketForAccessLogging.Arn
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+          - Sid: AllowS3LogDelivery
+            Effect: Allow
+            Principal:
+              Service: logging.s3.amazonaws.com
+            Action: 's3:PutObject'
+            Resource: !Sub '${S3BucketForAccessLogging.Arn}/*'
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref 'AWS::AccountId'
+              ArnLike:
+                aws:SourceArn: !Sub 'arn:aws:s3:::${S3BucketForInstanceStorageConfig}'
+  
+  S3BucketForServerAccessLogging:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  S3BucketForServerAccessLoggingPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3BucketForServerAccessLogging
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowSSLRequestsOnly
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource: 
+              - !Sub '${S3BucketForServerAccessLogging.Arn}/*'
+              - !GetAtt S3BucketForServerAccessLogging.Arn
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+          - Sid: AllowLoggingService
+            Effect: Allow
+            Principal:
+              Service: logging.s3.amazonaws.com
+            Action: 
+              - s3:PutObject
+            Resource: !Sub '${S3BucketForServerAccessLogging.Arn}/*'
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref 'AWS::AccountId'
+              ArnLike:
+                aws:SourceArn: 
+                   - !Sub 'arn:aws:s3:::${S3BucketForAccessLogging}'
+                   - !Sub 'arn:aws:s3:::${S3BucketForInstanceStorageConfig}'
+                   - !Sub 'arn:aws:s3:::${AmazonQDataSourceBucket}'
+  
+  ConnectCasesVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.cases'
+      VpcId: !Ref VPC
+      VpcEndpointType: Interface
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref VPCEndpointSecurityGroup
+      PrivateDnsEnabled: true
+
+  VPCEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for VPC Endpoint
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.0.0/16
+          Description: Allow HTTPS from VPC
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: Allow HTTPS to anywhere
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: LambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cases:ListDomains
+                  - cases:CreateCase
+                Resource: !Sub 'arn:aws:cases:${AWS::Region}:${AWS::AccountId}:domain/*'
+              - Effect: Allow
+                Action:
+                  - connect:DescribeAgentStatus
+                  - connect:DescribeContact
+                  - connect:DescribeUser
+                Resource: !Sub 'arn:aws:connect:${AWS::Region}:${AWS::AccountId}:instance/${AmazonConnectInstance.Id}/*'
+              - Effect: Allow
+                Action:
+                  - profile:SearchProfiles
+                Resource: 'arn:aws:profile:*:*:domains/amazon-connect-*'
+              - Effect: Allow
+                Action:
+                  - cases:GetCase
+                  - cases:UpdateCase
+                  - cases:AddRelatedItem
+                  - cases:RemoveRelatedItem
+                Resource: !Sub 'arn:aws:cases:*:${AWS::AccountId}:domain/*/case/*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: 'arn:aws:logs:*:*:*'
+              - Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DeleteNetworkInterface
+                Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*'
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeNetworkInterfaces
+                Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:*/*'
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import os
+          from botocore.exceptions import ClientError
+          import json
+
+          def lambda_handler(event, context):
+              # Get environment variables
+              domain_id = os.environ['DOMAIN_ID']
+              template_id = os.environ['TEMPLATE_ID']
+              customer_id = os.environ['CUSTOMER_ID']
+              endpoint_url = os.environ['CASES_ENDPOINT_URL']
+              
+              # Get title from the event
+              try:
+                  # Check if the input is from API Gateway
+                  if 'body' in event:
+                      body = json.loads(event['body'])
+                      title = body.get('title')
+                  else:
+                      # Direct Lambda invocation
+                      title = event.get('title')
+                      
+                  if not title:
+                      return {
+                          'statusCode': 400,
+                          'body': json.dumps({'error': 'Title is required'})
+                      }
+                      
+              except Exception as e:
+                  return {
+                      'statusCode': 400,
+                      'body': json.dumps({'error': f'Invalid input format: {str(e)}'})
+                  }
+
+              result = create_connect_case(domain_id, template_id, customer_id, title, endpoint_url)
+              
+              if result:
+                  return {
+                      'statusCode': 200,
+                      'body': json.dumps({
+                          'message': 'Case created successfully',
+                          'caseArn': result['caseArn'],
+                          'caseId': result['caseId']
+                      })
+                  }
+              else:
+                  return {
+                      'statusCode': 500,
+                      'body': json.dumps({'error': 'Failed to create case'})
+                  }
+
+          def create_connect_case(domain_id, template_id, customer_id, title, endpoint_url):
+              client = boto3.client('connectcases', endpoint_url=endpoint_url)
+
+              fields = [
+                  {
+                      'id': 'customer_id',
+                      'value': {'stringValue': customer_id}
+                  },
+                  {
+                      'id': 'title',
+                      'value': {'stringValue': title}
+                  }
+              ]
+
+              params = {
+                  'domainId': domain_id,
+                  'templateId': template_id,
+                  'fields': fields
+              }
+
+              try:
+                  response = client.create_case(**params)
+                  return {
+                      'caseArn': response['caseArn'],
+                      'caseId': response['caseId']
+                  }
+              except ClientError as e:
+                  error_code = e.response['Error']['Code']
+                  error_message = e.response['Error']['Message']
+                  print(f"Error ({error_code}): {error_message}")
+                  
+                  error_mapping = {
+                      'ResourceNotFoundException': 'The specified resource was not found.',
+                      'ValidationException': 'The input parameters are invalid.',
+                      'AccessDeniedException': "You don't have permission to perform this action."
+                  }
+                  
+                  print(f"Error: {error_mapping.get(error_code, 'An unexpected error occurred')}")
+                  return None
+      Runtime: python3.12
+      MemorySize: 128
+      Timeout: 30
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+      Environment:
+        Variables:
+          DOMAIN_ID: !Select [1, !Split ["/", !GetAtt ConnectCasesCustomResource.DomainArn]]
+          TEMPLATE_ID: !Select [3, !Split ["/", !GetAtt ConnectCasesCustomResource.TemplateArn]]
+          CUSTOMER_ID: !Sub 'arn:aws:profile:${AWS::Region}:${AWS::AccountId}:domains/${AmazonConnectDomain}/profiles/${ConnectCasesCustomResource.ProfileId}'
+          CASES_ENDPOINT_URL: !Sub 
+            - 'https://${DNSName}'
+            - DNSName: !Select [1, !Split [":", !Select [0, !GetAtt ConnectCasesVPCEndpoint.DnsEntries]]]
+      ReservedConcurrentExecutions: 10
+
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Lambda function
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: Allow HTTPS to anywhere
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: ConnectCasesAPI
+      ProtocolType: HTTP
+
+  HttpApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: $default
+      AutoDeploy: true
+      AccessLogSettings:
+        DestinationArn: !GetAtt HttpApiLogGroup.Arn
+        Format: '{ "requestId":"$context.requestId", "ip": "$context.identity.sourceIp", "requestTime":"$context.requestTime", "httpMethod":"$context.httpMethod","routeKey":"$context.routeKey", "status":"$context.status","protocol":"$context.protocol", "responseLength":"$context.responseLength" }'
+
+  HttpApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/apigateway/${HttpApi}'
+      RetentionInDays: 7
+      KmsKeyId: !GetAtt MyKMSKey.Arn
+  HttpApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt LambdaFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  HttpApiRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: 'POST /create-case'
+      Target: !Join
+        - /
+        - - integrations
+          - !Ref HttpApiIntegration
+      AuthorizationType: JWT
+      AuthorizerId: !Ref HttpApiAuthorizer
+      AuthorizationScopes:
+        - 'write/tasks'
+
+  HttpApiAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref HttpApi
+      AuthorizerType: JWT
+      IdentitySource:
+        - '$request.header.Authorization'
+      JwtConfiguration:
+        Audience:
+          - !Ref Audience
+        Issuer: !Ref Issuer
+      Name: HttpApiJWTAuthorizer
+
+  LambdaApiPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref LambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*'
+
+  MyKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for S3 bucket encryption
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Id: key-default-1
+        Statement:        
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: AllowQBusinessService
+            Effect: Allow
+            Principal:
+              Service:
+                - qbusiness.amazonaws.com
+                - kendra.amazonaws.com
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey
+              - kms:DescribeKey
+            Resource: '*'
+          - Sid: AllowSecretsManagerToUseKMS
+            Effect: Allow
+            Principal:
+              Service: secretsmanager.amazonaws.com
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey
+            Resource: '*'
+          - Sid: AllowCloudWatchLogs
+            Effect: Allow
+            Principal:
+              Service: logs.amazonaws.com
+            Action:
+              - kms:Encrypt*
+              - kms:Decrypt*
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:Describe*
+            Resource: '*'
+  AmazonQDataSourceBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      ObjectLockEnabled: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: 'aws:kms'
+              KMSMasterKeyID: !GetAtt MyKMSKey.Arn
+      VersioningConfiguration:
+        Status: Enabled
+      LoggingConfiguration:
+        DestinationBucketName: !Ref S3BucketForAccessLogging
+        LogFilePrefix: amazon-q-data-source-logs
+
+  AmazonQDataSourceBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AmazonQDataSourceBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EnforceTLSRequestsOnly
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !Sub '${AmazonQDataSourceBucket.Arn}/*'
+              - !GetAtt AmazonQDataSourceBucket.Arn
+            Condition:
+              Bool:
+                'aws:SecureTransport': false
+          - Sid: EnforceEncryptionInTransit
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !Sub '${AmazonQDataSourceBucket.Arn}/*'
+              - !GetAtt AmazonQDataSourceBucket.Arn
+            Condition:
+              NumericLessThan:
+                's3:TlsVersion': 1.2
+          - Sid: DenyIncorrectEncryptionHeader
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:PutObject'
+            Resource: !Sub '${AmazonQDataSourceBucket.Arn}/*'
+            Condition:
+              StringNotEquals:
+                's3:x-amz-server-side-encryption-aws-kms-key-id': !GetAtt MyKMSKey.Arn
+
+  QBusinessApp:
+    Type: AWS::QBusiness::Application
+    Properties:
+      DisplayName: qbusiness-connect-case
+      Description: qbusiness create case in Amazon Connect demo app
+      IdentityCenterInstanceArn: !Ref IdcInstanceArn
+      RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/qbusiness.amazonaws.com/AWSServiceRoleForQBusiness
+
+  QBusinessIndex:
+    Type: AWS::QBusiness::Index
+    Properties:
+      ApplicationId: !Ref QBusinessApp
+      CapacityConfiguration: 
+        Units: 1
+      DisplayName: QBusinessIndexExample
+      Type: ENTERPRISE
+
+  QBusinessRetriever:
+    Type: AWS::QBusiness::Retriever
+    Properties:
+      ApplicationId: !Ref QBusinessApp
+      Configuration: 
+        NativeIndexConfiguration: 
+          IndexId: !GetAtt QBusinessIndex.IndexId
+      DisplayName: QBusinessExampleRetriever
+      Type: NATIVE_INDEX
+
+  QBusinessWebExperience:
+    Type: AWS::QBusiness::WebExperience
+    DependsOn: QBizWebexperienceRole
+    Properties:
+      ApplicationId: !Ref QBusinessApp
+      RoleArn: !GetAtt QBizWebexperienceRole.Arn
+
+  QBizDataSourceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'AllowsAmazonQToAssumeRoleForServicePrincipal'
+            Effect: Allow
+            Principal:
+              Service: 
+                - qbusiness.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - !Ref QBizKMSPolicy
+        - !Ref QBizS3Policy
+        - !Ref QBizDocumentPolicy
+        - !Ref QBizNetworkPolicy
+
+  QBizWebexperienceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'QBusinessTrustPolicy'
+            Effect: 'Allow'
+            Principal:
+              Service:
+                - 'application.qbusiness.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+              - 'sts:SetContext'
+            Condition:
+              StringEquals:
+                'aws:SourceAccount': !Sub '${AWS::AccountId}'
+              ArnEquals:
+                'aws:SourceArn': !Sub 'arn:aws:qbusiness:${AWS::Region}:${AWS::AccountId}:application/*'
+      ManagedPolicyArns:
+        - !Ref QBizConversationPolicy
+        - !Ref QBizKMSPolicy
+        - !Ref QBizSTSPolicy
+        - !Ref QBizAppsBasicPolicy
+        - !Ref QBizAppsAdvancedPolicy
+
+  QBizKMSPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Description: 'Allows Amazon Q to decrypt secrets and S3 objects'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'AllowsAmazonQToDecryptSecretAndS3Objects'
+            Effect: Allow
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey'
+            Resource:
+              - !GetAtt MyKMSKey.Arn
+
+  QBizS3Policy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Description: 'Allows Amazon Q to access S3'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'AllowsAmazonQToGetObjectfromS3'
+            Effect: Allow
+            Action:
+              - 's3:GetObject'
+            Resource:
+              - !Sub 'arn:aws:s3:::${AmazonQDataSourceBucket}/*'
+            Condition:
+              StringEquals:
+                'aws:ResourceAccount': !Sub '${AWS::AccountId}'
+          - Sid: 'AllowsAmazonQToListS3Buckets'
+            Effect: Allow
+            Action:
+              - 's3:ListBucket'
+            Resource:
+              - !Sub 'arn:aws:s3:::${AmazonQDataSourceBucket}'
+            Condition:
+              StringEquals:
+                'aws:ResourceAccount': !Sub '${AWS::AccountId}'
+
+  QBizDocumentPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Description: 'Allows Amazon Q to manage documents and groups'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'AllowsAmazonQToIngestDocuments'
+            Effect: Allow
+            Action:
+              - 'qbusiness:BatchPutDocument'
+              - 'qbusiness:BatchDeleteDocument'
+            Resource:
+              - !Sub 'arn:aws:qbusiness:${AWS::Region}:${AWS::AccountId}:*'
+          - Sid: 'AllowsAmazonQToCallPrincipalMappingAPIs'
+            Effect: Allow
+            Action:
+              - 'qbusiness:PutGroup'
+              - 'qbusiness:CreateUser'
+              - 'qbusiness:DeleteGroup'
+              - 'qbusiness:UpdateUser'
+              - 'qbusiness:ListGroups'
+            Resource:
+              - !Sub 'arn:aws:qbusiness:${AWS::Region}:${AWS::AccountId}:application/*'
+
+  QBizNetworkPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Description: 'Allows Amazon Q to manage network interfaces'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'AllowsAmazonQToCreateAndDeleteENI'
+            Effect: Allow
+            Action:
+              - 'ec2:CreateNetworkInterface'
+              - 'ec2:DeleteNetworkInterface'
+            Resource:
+              - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*'
+              - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*'
+              - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*'
+            Condition:
+              StringLike:
+                'aws:RequestTag/AMAZON_Q': !Sub 'qbusiness_${AWS::AccountId}_*'
+              ForAllValues:StringEquals:
+                'aws:TagKeys':
+                  - 'AMAZON_Q'
+          - Sid: 'AllowsAmazonQToCreateTags'
+            Effect: Allow
+            Action:
+              - 'ec2:CreateTags'
+            Resource:
+              - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*'
+
+  QBizConversationPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Description: 'Allows Amazon Q conversation and basic operations'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: QBusinessConversationPermission
+            Effect: Allow
+            Action:
+              - qbusiness:Chat
+              - qbusiness:ChatSync
+              - qbusiness:ListMessages
+              - qbusiness:ListConversations
+              - qbusiness:DeleteConversation
+              - qbusiness:PutFeedback
+              - qbusiness:GetWebExperience
+              - qbusiness:GetApplication
+              - qbusiness:ListPlugins
+              - qbusiness:GetChatControlsConfiguration
+              - qbusiness:ListIndices
+              - qbusiness:ListDataSources
+            Resource: !Sub 'arn:aws:qbusiness:${AWS::Region}:${AWS::AccountId}:application/*'
+
+  QBizSTSPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Description: 'Allows STS operations for Amazon Q'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: QBusinessSetContextPermissions
+            Effect: Allow
+            Action:
+              - sts:SetContext
+            Resource:
+              - 'arn:aws:sts::*:self'
+            Condition:
+              StringLike:
+                'aws:CalledViaLast': 'qbusiness.amazonaws.com'
+
+  QBizAppsBasicPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Description: 'Allows basic QApps operations'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: QAppsResourceAgnosticPermissions
+            Effect: Allow
+            Action:
+              - qapps:CreateQApp
+              - qapps:PredictQApp
+              - qapps:PredictProblemStatementFromConversation
+              - qapps:PredictQAppFromProblemStatement
+              - qapps:ListQApps
+              - qapps:ListLibraryItems
+              - qapps:CreateSubscriptionToken
+            Resource: !Sub 'arn:aws:qbusiness:${AWS::Region}:${AWS::AccountId}:application/*'
+          - Sid: QAppsAppUniversalPermissions
+            Effect: Allow
+            Action:
+              - qapps:DisassociateQAppFromUser
+            Resource: !Sub 'arn:aws:qapps:${AWS::Region}:${AWS::AccountId}:application/*'
+
+  QBizAppsAdvancedPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Description: 'Allows advanced QApps operations'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: QAppsAppOwnerPermissions
+            Effect: Allow
+            Action:
+              - qapps:GetQApp
+              - qapps:CopyQApp
+              - qapps:UpdateQApp
+              - qapps:DeleteQApp
+              - qapps:ImportDocument
+              - qapps:ImportDocumentToQApp
+              - qapps:CreateLibraryItem
+              - qapps:UpdateLibraryItem
+              - qapps:StartQAppSession
+            Resource: !Sub 'arn:aws:qapps:${AWS::Region}:${AWS::AccountId}:application/*'
+            Condition:
+              StringEqualsIgnoreCase:
+                'qapps:UserIsAppOwner': 'true'
+
+  UpdateKMSKeyPolicyFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt UpdateKMSKeyPolicyRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+          import cfnresponse
+  
+          def handler(event, context):
+              if event['RequestType'] in ['Create', 'Update']:
+                  try:
+                      kms = boto3.client('kms')
+                      response = kms.get_key_policy(KeyId=event['ResourceProperties']['KMSKeyId'], PolicyName='default')
+                      policy = json.loads(response['Policy'])
+                      
+                      qbiz_role_arn = event['ResourceProperties']['QBizDataSourceRoleArn']
+                      account_id = qbiz_role_arn.split(':')[4]
+                      role_name = qbiz_role_arn.split('/')[-1]
+                      
+                      policy['Statement'].append({
+                          'Sid': 'AllowQBusinessAccess',
+                          'Effect': 'Allow',
+                          'Principal': {'AWS': qbiz_role_arn},
+                          'Action': ['kms:Decrypt', 'kms:DescribeKey', 'kms:GenerateDataKey'],
+                          'Resource': '*'
+                      })
+                      policy['Statement'].append({
+                          'Sid': 'AllowKendraSession',
+                          'Effect': 'Allow',
+                          'Principal': {'AWS': f"arn:aws:sts::{account_id}:assumed-role/{role_name}/KendraCustomerSession"},
+                          'Action': ['kms:Decrypt', 'kms:DescribeKey', 'kms:GenerateDataKey'],
+                          'Resource': '*'
+                      })
+                      
+                      kms.put_key_policy(KeyId=event['ResourceProperties']['KMSKeyId'], PolicyName='default', Policy=json.dumps(policy))
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                  except Exception as e:
+                      print(e)
+                      cfnresponse.send(event, context, cfnresponse.FAILED, {})
+              else:
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+      Runtime: python3.12
+      Timeout: 60
+
+      ReservedConcurrentExecutions: 10
+
+  UpdateKMSKeyPolicyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 
+                - lambda.amazonaws.com
+            Action: 
+              - sts:AssumeRole
+      ManagedPolicyArns:
+       - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+       - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: UpdateKMSKeyPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kms:GetKeyPolicy
+                  - kms:PutKeyPolicy
+                Resource: !GetAtt MyKMSKey.Arn
+
+  UpdateKMSKeyPolicy:
+    Type: Custom::UpdateKMSKeyPolicy
+    DependsOn: 
+      - MyKMSKey
+      - QBizDataSourceRole
+    Properties:
+      ServiceToken: !GetAtt UpdateKMSKeyPolicyFunction.Arn
+      KMSKeyId: !GetAtt MyKMSKey.Arn
+      QBizDataSourceRoleArn: !GetAtt QBizDataSourceRole.Arn
+
+  DataSourceS3:
+    Type: "AWS::QBusiness::DataSource"
+    Properties:
+      ApplicationId: !Ref QBusinessApp
+      IndexId: !GetAtt QBusinessIndex.IndexId
+      DisplayName: MyS3DataSource
+      RoleArn: !GetAtt 'QBizDataSourceRole.Arn'
+      Configuration:
+        type: S3
+        syncMode: FULL_CRAWL
+        connectionConfiguration:
+          repositoryEndpointMetadata:
+            BucketName: !Ref AmazonQDataSourceBucket
+        repositoryConfigurations:
+          document:
+            fieldMappings:
+              - dataSourceFieldName: content
+                indexFieldName: document_content
+                indexFieldType: STRING
+
+  QBusinessSecret:
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      Name: !Sub 'QBusiness-Custom-${AWS::StackName}-Secret'
+      Description: 'Secret for Amazon Q custom plugin OAuth2 credentials'
+      KmsKeyId: !GetAtt MyKMSKey.Arn
+      SecretString: 
+        !Join 
+          - ''
+          - - '{"client_id":"'
+            - !Ref ClientId
+            - '","client_secret":"'
+            - !Ref ClientSecret
+            - '","redirect_uri":"'
+            - !Sub '${QBusinessWebExperience.DefaultEndpoint}oauth/callback'
+            - '"}'
+
+  QBusinessPluginRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+             - Effect: Allow
+               Principal:
+                 Service: 'qbusiness.amazonaws.com'
+               Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: QBusinessPluginPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'secretsmanager:GetSecretValue'
+                Resource: !Ref QBusinessSecret
+              - Effect: Allow
+                Action:
+                  - 'kms:Decrypt'
+                Resource: !GetAtt MyKMSKey.Arn
+
+
+  QCustomPlugin:
+    Type: 'AWS::QBusiness::Plugin'
+    DependsOn: QBusinessApp
+    Properties:
+      ApplicationId: !Ref QBusinessApp
+      DisplayName: !Ref PluginDisplayName
+      Type: 'CUSTOM'
+      State: 'ENABLED'
+      AuthConfiguration: 
+        OAuth2ClientCredentialConfiguration:
+          RoleArn: !GetAtt QBusinessPluginRole.Arn
+          SecretArn: !Ref QBusinessSecret
+      CustomPluginConfiguration:
+        ApiSchemaType: 'OPEN_API_V3'
+        Description: 'Custom plugin for creating tasks'
+        ApiSchema:
+          Payload: !Sub |
+            openapi: 3.0.1
+            info:
+              title: connectapi-API
+              description: Created by AWS Lambda
+              version: 2024-06-17 18:08:47UTC
+            servers:
+              - url: ${HttpApi.ApiEndpoint}
+            paths:
+              /create-case:
+                post:
+                  description: Creates a new task and returns the success message
+                  security:
+                    - OAuth2:
+                        - write/tasks
+                  requestBody:
+                    required: true
+                    content:
+                      application/json:
+                        schema:
+                          type: object
+                          required:
+                            - title
+                          properties:
+                            title:
+                              type: string
+                              description: Title of the task
+                  responses:
+                    "200":
+                      description: Successful response
+                      content:
+                        application/json:
+                          schema:
+                            type: object
+                            properties:
+                              message:
+                                type: string
+                                description: Success message
+                    "400":
+                      description: Bad request
+                    "401":
+                      $ref: "#/components/responses/UnauthorizedError"
+                    "403":
+                      $ref: "#/components/responses/ForbiddenError"
+            components:
+              securitySchemes:
+                OAuth2:
+  
+                  type: oauth2
+                  flows:
+                    authorizationCode:
+                      authorizationUrl: ${AuthorizationUrl}
+                      tokenUrl: ${TokenUrl}
+                      scopes:
+                        write/tasks: Write access to create tasks
+              responses:
+                UnauthorizedError:
+                  description: Access token is missing or invalid
+                ForbiddenError:
+                  description: Access token does not have the required scope
+            security:
+              - OAuth2:
+                  - write/tasks
+      Tags: 
+        - Key: 'Environment'
+          Value: 'Production'
+  S3BucketsCleanup:
+    Type: Custom::S3BucketsCleanup
+    DependsOn:
+      - S3BucketForInstanceStorageConfig
+      - S3BucketForAccessLogging
+      - S3BucketForServerAccessLogging
+      - AmazonQDataSourceBucket
+    Properties:
+      ServiceToken: !GetAtt S3BucketCleanupFunction.Arn
+      Buckets:
+        - !Ref S3BucketForInstanceStorageConfig
+        - !Ref S3BucketForAccessLogging
+        - !Ref S3BucketForServerAccessLogging
+        - !Ref AmazonQDataSourceBucket
+  
+  S3BucketCleanupFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt S3BucketCleanupRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          import logging
+  
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+  
+          def delete_bucket_contents(bucket_name):
+              s3 = boto3.resource('s3')
+              bucket = s3.Bucket(bucket_name)
+              
+              # Delete all object versions and delete markers
+              bucket.object_versions.delete()
+              
+              # Delete remaining objects (if versioning was not enabled)
+              bucket.objects.all().delete()
+  
+          def handler(event, context):
+              logger.info('Received event: %s', event)
+              
+              if event['RequestType'] == 'Delete':
+                  buckets = event['ResourceProperties']['Buckets']
+                  for bucket_name in buckets:
+                      try:
+                          delete_bucket_contents(bucket_name)
+                          logger.info(f'Successfully deleted contents of bucket {bucket_name}')
+                      except Exception as e:
+                          logger.error(f'Error deleting contents of bucket {bucket_name}: {str(e)}')
+                          # Continue with other buckets even if one fails
+                  
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+              else:
+                  logger.info(f'No action needed for {event["RequestType"]} event')
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+  
+      Runtime: python3.12
+      Timeout: 900  # 15 minutes, adjust as needed
+      ReservedConcurrentExecutions: 10
+  
+  S3BucketCleanupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: S3BucketCleanupPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                   - s3:ListBucket
+                   - s3:ListBucketVersions
+                   - s3:GetBucketVersioning
+                   - s3:GetBucketLocation
+                   - s3:DeleteObject
+                   - s3:DeleteObjectVersion
+                   - s3:GetObject
+                   - s3:GetObjectVersion
+                   - s3:ListMultipartUploadParts
+                   - s3:AbortMultipartUpload
+                Resource:
+                  - !Sub 'arn:aws:s3:::${S3BucketForInstanceStorageConfig}'
+                  - !Sub 'arn:aws:s3:::${S3BucketForInstanceStorageConfig}/*'
+                  - !Sub 'arn:aws:s3:::${S3BucketForAccessLogging}'
+                  - !Sub 'arn:aws:s3:::${S3BucketForAccessLogging}/*'
+                  - !Sub 'arn:aws:s3:::${S3BucketForServerAccessLogging}'
+                  - !Sub 'arn:aws:s3:::${S3BucketForServerAccessLogging}/*'
+                  - !Sub 'arn:aws:s3:::${AmazonQDataSourceBucket}'
+                  - !Sub 'arn:aws:s3:::${AmazonQDataSourceBucket}/*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: 'arn:aws:logs:*:*:*'
+  
+Outputs:
+  ConnectAdminUsername:
+    Description: "The username for the Amazon Connect admin user"
+    Value: !Ref ConnectUserAdmin
+  QBizWebexperienceURL:
+    Description: "URL of the Amazon Q Web Experience"
+    Value: !GetAtt 'QBusinessWebExperience.DefaultEndpoint'
+    Export:
+      Name: !Sub "${AWS::StackName}-WebExperienceURL"
+  ApiEndpoint:
+    Description: "HTTP API endpoint URL"
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+
