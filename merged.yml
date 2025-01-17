@@ -61,7 +61,7 @@ Resources:
   ChildStack1:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: 'https://aws-blogs-artifacts-public.s3.us-east-1.amazonaws.com/ML-17430/cloudformation/main-exv3.yml'
+      TemplateURL: 'https://connectyaml.s3.us-east-1.amazonaws.com/main/main-exv3.yml'
       Parameters:
         Environment: !Ref Environment
         Audience: !Ref Audience
