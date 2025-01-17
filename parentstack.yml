@@ -34,7 +34,6 @@ Parameters:
   TokenUrl:
     Type: String
     Description: 'OAuth2 Token URL'
-    Default: 'https://dev-16299916.okta.com/oauth2/ausml4dg1lZlW0E2n5d7/v1/token'
   SourceZipUrl:
     Type: String
     Default: "https://aws-blogs-artifacts-public.s3.us-east-1.amazonaws.com/ML-17430/webconnect/Archive.zip"
