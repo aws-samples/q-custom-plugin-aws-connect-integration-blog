@@ -52,7 +52,7 @@ Resources:
   ChildStack1:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: 'https://connectyaml.s3.us-east-1.amazonaws.com/main/main-exv3.yml'
+      TemplateURL: 'https://aws-blogs-artifacts-public.s3.us-east-1.amazonaws.com/ML-17430/cloudformation/childstack1.yml'
       Parameters:
         Environment: !Ref Environment
         Audience: !Ref Audience
@@ -69,7 +69,7 @@ Resources:
     Type: AWS::CloudFormation::Stack
     DependsOn: ChildStack1
     Properties:
-      TemplateURL: 'https://aws-blogs-artifacts-public.s3.us-east-1.amazonaws.com/ML-17430/cloudformation/web-ex3.yml'
+      TemplateURL: 'https://aws-blogs-artifacts-public.s3.us-east-1.amazonaws.com/ML-17430/cloudformation/childstack2.yml'
       Parameters:
         AmazonQUrl: !GetAtt ChildStack1.Outputs.QBizWebexperienceURL
         SourceZipUrl: !Ref SourceZipUrl
