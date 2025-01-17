@@ -9,15 +9,12 @@ Parameters:
   Audience:
     Type: String
     Description: 'Audience for HTTP API Authorizer'
-    Default: 'api://connect'
   Issuer:
     Type: String
     Description: 'Issuer for HTTP API Authorizer'
-    Default: 'https://dev-16299916.okta.com/oauth2/ausml4dg1lZlW0E2n5d7'
   IdcInstanceArn:
     Type: String
     Description: "ARN of the Identity Center (IDC) Instance"    
-    Default: "arn:aws:sso:::instance/ssoins-7223c9c148eaa07c"
   PluginDisplayName:
     Type: String
     Description: 'The display name for the plugin'
@@ -28,24 +25,19 @@ Parameters:
   ClientId:
     Type: String
     Description: 'OAuth2 Client ID'
-    Default: '0oaml4cu92mTBaDEU5d7'
-    NoEcho: true
   ClientSecret:
     Type: String
     Description: 'OAuth2 Client Secret'
-    Default: 'D4WyLdUZnR4YQ0tIQ-7Pgf9uwJGx3cnwY24rw5n08zjYkWhuxuIB00B4SwgEIuro'
-    NoEcho: true
   AuthorizationUrl:
     Type: String
     Description: 'OAuth2 Authorization URL'
-    Default: 'https://dev-16299916.okta.com/oauth2/ausml4dg1lZlW0E2n5d7/v1/authorize'
   TokenUrl:
     Type: String
     Description: 'OAuth2 Token URL'
     Default: 'https://dev-16299916.okta.com/oauth2/ausml4dg1lZlW0E2n5d7/v1/token'
   SourceZipUrl:
     Type: String
-    Default: "https://aws-blogs-artifacts-public.s3.us-east-1.amazonaws.com/ML-17430/webconnect/Archive+(1).zip"
+    Default: "https://aws-blogs-artifacts-public.s3.us-east-1.amazonaws.com/ML-17430/webconnect/Archive.zip"
   ContainerPort:
     Type: Number 
     Default: 80
