@@ -6,25 +6,25 @@ This project contains CloudFormation templates for deploying an AWS Connect inst
 
 ```
 .
-├── main-exv3.yml
-├── merged.yml
-├── README.md
-└── web-ex3.yml
+├── childstack1.yml
+├── childstack2.yml
+├── parentstack.yml
+└── README.md
 ```
 
 ## Main Components
 
-1. `merged.yml`: Parent stack that manages two child stacks.
-2. `main-exv3.yml`: Creates an AWS Connect instance and related resources.
-3. `web-ex3.yml`: Sets up the web application infrastructure.
+1. `parentstack.yml`: Parent stack that manages two child stacks.
+2. `childstack1.yml`: Creates an AWS Connect instance and related resources.
+3. `childstack2.yml`: Sets up the web application infrastructure.
 
 ## Deployment Instructions
 
-To deploy this project, use the AWS CloudFormation console or AWS CLI to create a stack using the `merged.yml` template. This will automatically create the child stacks for the AWS Connect instance and web application.
+To deploy this project, use the AWS CloudFormation console or AWS CLI to create a stack using the `parentstack.yml` template. This will automatically create the child stacks for the AWS Connect instance and web application.
 
 ## Configuration Parameters
 
-The `merged.yml` template accepts the following parameters:
+The `parentstack.yml` template accepts the following parameters:
 
 - Environment
 - Audience
@@ -43,21 +43,23 @@ Ensure you have the correct values for these parameters before deployment.
 
 ## Resources Created
 
-### AWS Connect Instance (main-exv3.yml)
+### AWS Connect Instance (childstack1.yml)
 
 - VPC with private subnets
 - Amazon Connect instance
 - Customer Profiles domain
 - Hours of operation
 - Custom security profile
+- VPC Flow Logs
 
-### Web Application (web-ex3.yml)
+### Web Application (childstack2.yml)
 
 - ECR repository
 - CodeBuild project
 - IAM roles and policies
 - VPC with flow logs
 - Lambda function for triggering CodeBuild
+- KMS keys for encryption
 
 ## Prerequisites
 
