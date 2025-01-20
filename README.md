@@ -85,9 +85,26 @@ Ensure you have the correct values for these parameters before deployment.
 
 Before deploying this project, ensure you have:
 
-1. AWS CLI configured with appropriate permissions
-2. Access to create resources in Amazon Connect, EC2, ECR, CodeBuild, and Lambda
-3. Source code for the web application available at the specified `SourceZipUrl`
+1.  AWS CLI configured with appropriate permissions
+2.  Access to create resources in Amazon Connect, EC2, ECR, CodeBuild, and Lambda
+3.  Source code for the web application available at the specified `SourceZipUrl`
+4.	Have a valid AWS account. 
+5.	Have Okta developer account, setup an application and API. If you do not have an Okta please see below instructions.
+6.	Have an Amazon Q Business Pro subscription to create Amazon Q apps. 
+7.	Have the service-linked IAM role AWSServiceRoleForQBusiness. If you don’t have one, create it with the qbusiness.amazonaws.com service name.
+8.	Have an AWS Identity and Access Management (IAM) role in the account that has sufficient permissions to create the necessary resources. If you have administrator access to the account, no action is required.
+9.	Enable AWS Cloudtrail logging for operational and risk auditing.
+10.	Enable Budget policy notification to protect customer from unwanted billing.
+
+
+## Cleanup
+
+To avoid incurring future charges, delete the resources that you created and clean up your account.
+You can clean up the AWS environment using the following steps:
+1.	Empty the contents of the S3 buckets you created as part of the CloudFormation stack.
+2.	Delete the CloudFormation stack you created as part of this post.
+3.	Disable the application from AWS IAM Identity Center.
+
 
 ## Notes
 
@@ -96,3 +113,5 @@ Before deploying this project, ensure you have:
 - VPC Flow Logs are enabled and encrypted using KMS for enhanced security.
 
 For more detailed information about each component, refer to the individual CloudFormation template files.
+
+
