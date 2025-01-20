@@ -1,6 +1,26 @@
 # AWS Connect and Web Application Deployment
 
-This project contains CloudFormation templates for deploying an AWS Connect instance and a web application infrastructure.
+This project contains CloudFormation templates for deploying Amazon Q, Amazon Connect instance and a web application infrastructure.
+
+
+## Architecture
+
+![Architecture](/Images/architecture.png)
+
+The architecture for this solution is described as follows
+
+1.	Users in Okta are configured to be federated to AWS IAM Identity Center.
+2.	When user clicks on chat in web application, the Amazon Q Business application will authenticate users against Okta as identity source through Amazon IAM Identity Center, create a session and stores it Amazon Q application.
+3.	Amazon Q business application will fetch knowledge from the Amazon S3 Data source to answer questions or generate summaries. 
+4.	Amazon Q custom plugin uses Open API schema to discover and understand the capabilities of the Amazon API Gateway API.
+5.	OAuth information is stored in AWS Secrets Manager and provide the Secret information to the plugin.
+6.	Plugin assumes IAM role to access the secrets in AWS Secret Manager.
+7.	When user wants to send a case, the custom plugin invokes API hosted on the Amazon API Gateway. 
+8.	Amazon API Gateway uses the same Okta user’s session and authorizes the access.
+9.	Amazon API Gateway will then invoke AWS Lambda to create a case in Amazon Connect.
+10.	AWS Lambda hosted in Amazon Virtual Private Cloud (VPC) internally calls  Amazon Connect  API via  Amazon Connect VPC Interface Endpoint powered by AWS PrivateLink. 
+11.	The contact center agents can also use Amazon Q in Connect to further assist the user. 
+
 
 ## Repository Structure
 
