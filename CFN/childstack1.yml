@@ -688,13 +688,13 @@ Resources:
       InstanceArn: !GetAtt AmazonConnectInstance.Arn
       RoutingProfileArn: !Ref CustomAdminRoutingProfile
       SecurityProfileArns: [!Ref CustomSecurityProfileAdmin]
-      Password: !GetAtt CustomResourceGenerateRandomStringAdmin.RandomString
+      Password: !Sub '{{resolve:secretsmanager:${CustomResourceGenerateRandomStringAdmin.SecretArn}:SecretString}}'
 
   LambdaFunctionGenerateRandomString:
     Type: AWS::Lambda::Function
     Properties:
       Handler: index.lambda_handler
-      Description: Generate random string
+      Description: Generate random string and store in Secrets Manager
       Role: !GetAtt GenerateRandomStringRole.Arn
       Runtime: python3.12
       MemorySize: 128
@@ -712,7 +712,7 @@ Resources:
           import cfnresponse
           import string
   
-          client = boto3.client('ssm')
+          client = boto3.client('secretsmanager')
   
           LOG_LEVEL = os.getenv('LOG_LEVEL')
   
@@ -730,14 +730,15 @@ Resources:
             if request_type == 'Delete':
               security_profile_name = event['ResourceProperties']['SecurityProfileName']
               try:
-                response = client.delete_parameter(
-                  Name=f'amazon-connect-temp-{security_profile_name}-password'
+                response = client.delete_secret(
+                  SecretId=f'amazon-connect-temp-{security_profile_name}-password',
+                  ForceDeleteWithoutRecovery=True
                 )
   
                 cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
                 return
               except botocore.exceptions.ClientError as err:
-                if err.response['Error']['Code'] == 'ParameterNotFound':
+                if err.response['Error']['Code'] == 'ResourceNotFoundException':
                   cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
                   return
                 else:
@@ -763,26 +764,24 @@ Resources:
                 for i in range(int(string_length)-4):
                   random_string += random.SystemRandom().choice(valid_characters)
   
-                response = client.put_parameter(
+                response = client.create_secret(
                   Name=f'amazon-connect-temp-{security_profile_name}-password',
-                  Description=f'SSM Parameter to store the temporary Amazon Connect {security_profile_name} Password',
-                  Value=random_string,
-                  Type='SecureString',
-                  Overwrite=True,
-                  Tier='Standard'
+                  Description=f'Secret to store the temporary Amazon Connect {security_profile_name} Password',
+                  SecretString=random_string
                 )
   
                 response_data = {
-                  'RandomString': random_string
+                  'RandomString': random_string,
+                  'SecretArn': response['ARN']
                 }
                 cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data)
               except Exception as e:
                 logging.error(e)
                 cfnresponse.send(event, context, cfnresponse.FAILED, {'message': f'ERROR: {e}'})
                 return
-
+  
       ReservedConcurrentExecutions: 10
-
+  
   GenerateRandomStringRole:
     Type: AWS::IAM::Role
     Properties:
@@ -800,16 +799,16 @@ Resources:
         - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole 
       Policies:
-        - PolicyName: putAndDeleteSSMParameters
+        - PolicyName: SecretsManagerAccess
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
             - Effect: Allow
               Action:
-              - ssm:DeleteParameter
-              - ssm:PutParameter
-              Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter*
-
+              - secretsmanager:CreateSecret
+              - secretsmanager:DeleteSecret
+              Resource: !Sub arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:amazon-connect-temp-*
+  
   CustomResourceGenerateRandomStringAdmin:
     Type: Custom::S3CustomResource
     Properties:

@@ -34,7 +34,7 @@ Parameters:
     Description: 'Issuer for HTTP API Authorizer'
   IdcInstanceArn:
     Type: String
-    Description: "ARN of the Identity Center (IDC) Instance"    
+    Description: "ARN of the Identity Center (IDC) Instance"  
   PluginDisplayName:
     Type: String
     Description: 'The display name for the plugin'
@@ -45,9 +45,11 @@ Parameters:
   ClientId:
     Type: String
     Description: 'OAuth2 Client ID'
+    NoEcho: true
   ClientSecret:
     Type: String
     Description: 'OAuth2 Client Secret'
+    NoEcho: true
   AuthorizationUrl:
     Type: String
     Description: 'OAuth2 Authorization URL'
