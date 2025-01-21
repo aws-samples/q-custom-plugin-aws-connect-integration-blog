@@ -3,4 +3,5 @@
 *.key
 .ssh/
 .DS_Store
+**/.DS_Store
 
