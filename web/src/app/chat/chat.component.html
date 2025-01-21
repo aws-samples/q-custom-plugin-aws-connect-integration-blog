@@ -1,0 +1,7 @@
+<button class="chat-toggle" (click)="toggleChat()" >
+    <i class="fas fa-comments">Chat with us</i>
+</button>
+
+<div class="chat-window" [class.visible]="isChatVisible">
+    <iframe [src]="chatUrl" frameborder="0"></iframe>
+</div>

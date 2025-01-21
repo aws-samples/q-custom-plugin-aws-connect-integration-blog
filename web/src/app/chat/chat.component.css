@@ -1,0 +1,203 @@
+/* Chat Button Styles */
+.chat-toggle {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 999;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 50px;
+    background: #2c3e50;
+    color: #ecf0f1;
+    font-weight: 500;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(44, 62, 80, 0.2);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Arial', sans-serif;
+}
+
+.chat-toggle:hover {
+    background: #34495e;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(44, 62, 80, 0.3);
+}
+
+.chat-toggle:active {
+    transform: translateY(0px);
+    box-shadow: 0 2px 8px rgba(44, 62, 80, 0.2);
+}
+
+.chat-toggle i {
+    font-size: 18px;
+}
+
+/* Chat Window Styles */
+.chat-window {
+    position: fixed;
+    bottom: 95px;
+    right: 20px;
+    width: 675px;
+    height: 665px;
+    display: none;
+    z-index: 1000;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 5px 25px rgba(0, 0, 0, 0.15);
+    transition: all 0.3s ease;
+    opacity: 0;
+    transform: translateY(20px);
+}
+
+.chat-window.visible {
+    display: block;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.chat-window iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    border-radius: 12px;
+    background: #fff;
+}
+
+/* Responsive Design */
+@media screen and (max-width: 768px) {
+    .chat-window {
+        width: 90%;
+        height: 60vh;
+        right: 5%;
+        left: 5%;
+        bottom: 30px;
+    }
+
+    .chat-toggle {
+        bottom: 15px;
+        right: 15px;
+        padding: 10px 20px;
+        font-size: 14px;
+    }
+}
+
+/* Dark Mode Support (if needed) */
+@media (prefers-color-scheme: dark) {
+    .chat-window {
+        background: #1e1e1e;
+        box-shadow: 0 5px 25px rgba(0, 0, 0, 0.3);
+    }
+}
+
+/* Animation for Chat Window */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Alternative Color Schemes */
+
+/* Professional Dark Blue */
+/*
+.chat-toggle {
+    background: #1a237e;
+    box-shadow: 0 4px 12px rgba(26, 35, 126, 0.2);
+}
+.chat-toggle:hover {
+    background: #151b60;
+}
+*/
+
+/* Modern Green */
+/*
+.chat-toggle {
+    background: #00c853;
+    box-shadow: 0 4px 12px rgba(0, 200, 83, 0.2);
+}
+.chat-toggle:hover {
+    background: #00a844;
+}
+*/
+
+/* Elegant Purple */
+/*
+.chat-toggle {
+    background: #6200ea;
+    box-shadow: 0 4px 12px rgba(98, 0, 234, 0.2);
+}
+.chat-toggle:hover {
+    background: #5000c8;
+}
+*/
+
+/* Optional: Close Button for Chat Window */
+.chat-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 5px;
+    transition: color 0.3s ease;
+}
+
+.chat-close:hover {
+    color: #333;
+}
+
+/* Optional: Loading State */
+.chat-window.loading::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.9);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1;
+}
+
+/* Optional: Custom Scrollbar */
+.chat-window {
+    scrollbar-width: thin;
+    scrollbar-color: #2962ff #f1f1f1;
+}
+
+.chat-window::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chat-window::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.chat-window::-webkit-scrollbar-thumb {
+    background: #2962ff;
+    border-radius: 3px;
+}
+
+/* Optional: Focus States for Accessibility */
+.chat-toggle:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(41, 98, 255, 0.3);
+}
+
+/* Optional: Error State */
+.chat-window.error {
+    border: 1px solid #ff3d00;
+}
