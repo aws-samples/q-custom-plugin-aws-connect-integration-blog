@@ -4,5 +4,6 @@
 .ssh/
 .DS_Store
 **/.DS_Store
+/web/node_modules/
+/web/.angular/cache/
 
-web/.angular/cache
