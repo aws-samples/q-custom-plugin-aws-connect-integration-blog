@@ -1,3 +1,4 @@
+
 # AWS Connect and Web Application Deployment
 
 This project contains CloudFormation templates for deploying Amazon Q, Amazon Connect instance and a web application infrastructure.
@@ -113,5 +114,4 @@ You can clean up the AWS environment using the following steps:
 - VPC Flow Logs are enabled and encrypted using KMS for enhanced security.
 
 For more detailed information about each component, refer to the individual CloudFormation template files.
-
 
