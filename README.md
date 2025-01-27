@@ -12,8 +12,8 @@ The architecture for this solution is described as follows
 
 1.	Users in Okta are configured to be federated to AWS IAM Identity Center and a unique ID (audience) is configured for API Gateway API.
 2.	When user clicks on chat in web application the following flow will be initiated: 
-    a.	Amazon Q application uses Client ID and Client secret Key to exchange the Okta generated JSON Web Token (JWT) token with the IAM Identity Center. The token that includes the AWS STS context identity. 
-    b.	A temporary token will be issued to application server to assume role and access Amazon Q API.
+    - Amazon Q application uses Client ID and Client secret Key to exchange the Okta generated JSON Web Token (JWT) token with the IAM Identity Center. The token that includes the AWS STS context identity. 
+    -	A temporary token will be issued to application server to assume role and access Amazon Q API.
 3.	Amazon Q business application will fetch knowledge from the Amazon S3 Data source to answer questions or generate summaries. 
 4.	Amazon Q custom plugin uses Open API schema to discover and understand the capabilities of the Amazon API Gateway API.
 5.	OAuth information is stored in AWS Secrets Manager and provide the Secret information to the plugin.
@@ -30,9 +30,15 @@ The architecture for this solution is described as follows
 
 ```
 .
-├── childstack1.yml
-├── childstack2.yml
-├── parentstack.yml
+├── CFN
+├   ├── childstack1.yml
+├   ├── childstack2.yml
+├   ├── parentstack.yml
+├── Images
+├── Samples
+├── Web
+├   ├── src
+├   ├── dist
 └── README.md
 ```
 
