@@ -10,8 +10,10 @@ This project contains CloudFormation templates for deploying Amazon Q, Amazon Co
 
 The architecture for this solution is described as follows
 
-1.	Users in Okta are configured to be federated to AWS IAM Identity Center.
-2.	When user clicks on chat in web application, the Amazon Q Business application will authenticate users against Okta as identity source through Amazon IAM Identity Center, create a session and stores it Amazon Q application.
+1.	Users in Okta are configured to be federated to AWS IAM Identity Center and a unique ID (audience) is configured for API Gateway API.
+2.	When user clicks on chat in web application the following flow will be initiated: 
+    a.	Amazon Q application uses Client ID and Client secret Key to exchange the Okta generated JSON Web Token (JWT) token with the IAM Identity Center. The token that includes the AWS STS context identity. 
+    b.	A temporary token will be issued to application server to assume role and access Amazon Q API.
 3.	Amazon Q business application will fetch knowledge from the Amazon S3 Data source to answer questions or generate summaries. 
 4.	Amazon Q custom plugin uses Open API schema to discover and understand the capabilities of the Amazon API Gateway API.
 5.	OAuth information is stored in AWS Secrets Manager and provide the Secret information to the plugin.
@@ -20,7 +22,8 @@ The architecture for this solution is described as follows
 8.	Amazon API Gateway uses the same Okta user’s session and authorizes the access.
 9.	Amazon API Gateway will then invoke AWS Lambda to create a case in Amazon Connect.
 10.	AWS Lambda hosted in Amazon Virtual Private Cloud (VPC) internally calls  Amazon Connect  API via  Amazon Connect VPC Interface Endpoint powered by AWS PrivateLink. 
-11.	The contact center agents can also use Amazon Q in Connect to further assist the user. 
+11.	The contact center agents can also use Amazon Q in Connect to further assist the user.
+
 
 
 ## Repository Structure
