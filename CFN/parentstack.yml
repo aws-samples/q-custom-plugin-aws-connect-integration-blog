@@ -53,9 +53,11 @@ Parameters:
   AuthorizationUrl:
     Type: String
     Description: 'OAuth2 Authorization URL'
+    NoEcho: true
   TokenUrl:
     Type: String
     Description: 'OAuth2 Token URL'
+    NoEcho: true
   SourceZipUrl:
     Type: String
     Default: "https://aws-blogs-artifacts-public.s3.us-east-1.amazonaws.com/ML-17430/webconnect/Archive.zip"
