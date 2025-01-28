@@ -58,9 +58,6 @@ Parameters:
     Type: String
     Description: 'OAuth2 Token URL'
     NoEcho: true
-  SourceZipUrl:
-    Type: String
-    Default: "https://aws-blogs-artifacts-public.s3.us-east-1.amazonaws.com/ML-17430/webconnect/Archive.zip"
   ContainerPort:
     Type: Number 
     Default: 80
@@ -96,7 +93,6 @@ Resources:
       TemplateURL: 'https://aws-blogs-artifacts-public.s3.us-east-1.amazonaws.com/ML-17430/cloudformation/childstack2.yml'
       Parameters:
         AmazonQUrl: !GetAtt ChildStack1.Outputs.QBizWebexperienceURL
-        SourceZipUrl: !Ref SourceZipUrl
         ContainerPort: !Ref ContainerPort
         RepositoryName: !Ref RepositoryName
 Outputs:

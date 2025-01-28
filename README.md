@@ -65,7 +65,6 @@ The `parentstack.yml` template accepts the following parameters:
 - ClientSecret
 - AuthorizationUrl
 - TokenUrl
-- SourceZipUrl
 - ContainerPort
 - RepositoryName
 
