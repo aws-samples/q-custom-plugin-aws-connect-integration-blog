@@ -20,6 +20,7 @@
 
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Parent stack that manages two child stacks
+
 Parameters:
   Environment:
     Type: String
@@ -65,15 +66,144 @@ Parameters:
   RepositoryName:
     Type: String
     Default: "repo-demo"
-    Description: "Base name for the ECR repository (lowercase letters and numbers only)"
+    Description: "Base name for the ECR repository"
     AllowedPattern: "^[a-z-0-9]*$"
     ConstraintDescription: "Repository name must contain only lowercase letters, numbers, and hyphens."
 
 Resources:
+  TemplatesBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+         BlockPublicAcls: true
+         BlockPublicPolicy: true
+         IgnorePublicAcls: true
+         RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+  TemplatesBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref TemplatesBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFormationAccess
+            Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: 's3:GetObject'
+            Resource: !Sub '${TemplatesBucket.Arn}/*'
+          - Sid: AllowLambdaAccess
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt CustomResourceLambdaRole.Arn
+            Action:
+              - 's3:PutObject'
+              - 's3:GetObject'
+            Resource: !Sub '${TemplatesBucket.Arn}/*'
+        
+  CustomResourceLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                Resource: !Sub '${TemplatesBucket.Arn}/*'
+
+  DownloadTemplatesFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 300
+      ReservedConcurrentExecutions: 10
+      MemorySize: 256
+      Role: !GetAtt CustomResourceLambdaRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import urllib3
+          import json
+          import cfnresponse
+
+          def handler(event, context):
+              try:
+                  if event['RequestType'] in ['Create', 'Update']:
+                      print("Starting template download process")
+                      s3 = boto3.client('s3')
+                      http = urllib3.PoolManager()
+                      bucket = event['ResourceProperties']['BucketName']
+                      
+                      # GitHub raw content URLs for the templates
+                      base_url = "https://raw.githubusercontent.com/aws-samples/q-custom-plugin-aws-connect-integration-blog/refs/heads/main/CFN"
+                      templates = {
+                          'childstack1.yml': f"{base_url}/childstack1.yml",
+                          'childstack2.yml': f"{base_url}/childstack2.yml"
+                      }
+                      
+                      # Download and upload templates
+                      for template_name, template_url in templates.items():
+                          print(f"Downloading {template_name} from {template_url}")
+                          response = http.request('GET', template_url)
+                          print(f"Download status code: {response.status}")
+                          
+                          if response.status == 200:
+                              print(f"Uploading {template_name} to S3")
+                              s3.put_object(
+                                  Bucket=bucket,
+                                  Key=template_name,
+                                  Body=response.data
+                              )
+                              print(f"Successfully uploaded {template_name}")
+                          else:
+                              raise Exception(f"Failed to download {template_name}: {response.status}")
+                      
+                      responseData = {
+                          'Bucket': bucket,
+                          'ChildStack1Url': f"https://{bucket}.s3.amazonaws.com/childstack1.yml",
+                          'ChildStack2Url': f"https://{bucket}.s3.amazonaws.com/childstack2.yml"
+                      }
+                      print("Process completed successfully")
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
+                  else:
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                      
+              except Exception as e:
+                  print(f"Error: {str(e)}")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)})
+
+  DownloadTemplates:
+    Type: Custom::DownloadTemplates
+    Properties:
+      ServiceToken: !GetAtt DownloadTemplatesFunction.Arn
+      BucketName: !Ref TemplatesBucket
+
   ChildStack1:
     Type: AWS::CloudFormation::Stack
+    DependsOn: DownloadTemplates
     Properties:
-      TemplateURL: 'https://aws-blogs-artifacts-public.s3.us-east-1.amazonaws.com/ML-17430/cloudformation/childstack1.yml'
+      TemplateURL: !Sub 'https://${TemplatesBucket.DomainName}/childstack1.yml'
       Parameters:
         Environment: !Ref Environment
         Audience: !Ref Audience
@@ -85,17 +215,20 @@ Resources:
         AuthorizationUrl: !Ref AuthorizationUrl
         TokenUrl: !Ref TokenUrl
 
-
   ChildStack2:
     Type: AWS::CloudFormation::Stack
     DependsOn: ChildStack1
     Properties:
-      TemplateURL: 'https://aws-blogs-artifacts-public.s3.us-east-1.amazonaws.com/ML-17430/cloudformation/childstack2.yml'
+      TemplateURL: !Sub 'https://${TemplatesBucket.DomainName}/childstack2.yml'
       Parameters:
         AmazonQUrl: !GetAtt ChildStack1.Outputs.QBizWebexperienceURL
         ContainerPort: !Ref ContainerPort
         RepositoryName: !Ref RepositoryName
+
 Outputs:
+  BucketName:
+    Description: "Name of the created S3 bucket"
+    Value: !Ref TemplatesBucket
   QBizWebexperienceURL:
     Description: "URL of the Amazon Q Web Experience"
     Value: !GetAtt ChildStack1.Outputs.QBizWebexperienceURL
